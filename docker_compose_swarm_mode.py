@@ -110,7 +110,7 @@ class DockerCompose:
                 value = service_config[parameter]
 
                 def restart():
-                    cmd.extend(['--restart-condition', {'always': 'any'}[value], '\\\n'])
+                    cmd.extend(['--restart-condition', {'always': 'any', 'none':'none', 'on-failure':'on-failure'}[value], '\\\n'])
 
                 def logging():
                     cmd.extend(['--log-driver', value.get('driver', 'json-file'), '\\\n'])
