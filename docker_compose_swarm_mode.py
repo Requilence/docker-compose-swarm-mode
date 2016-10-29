@@ -151,6 +151,10 @@ class DockerCompose:
                     for port in value:
                         cmd.extend(['--publish', port, '\\\n'])
 
+                def labels():
+                    for label in value:
+                        cmd.extend(['--label', label, '\\\n'])
+
                 def networks():
                     for network in value:
                         cmd.extend(['--network', network if self.is_external_network(network) else self.project_prefix(network), '\\\n'])
