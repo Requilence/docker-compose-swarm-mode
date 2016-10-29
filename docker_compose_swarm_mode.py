@@ -300,7 +300,6 @@ class DockerCompose:
                         for k, v in value.items():
                             cmd.extend(['--env-add', '"{}={}"'.format(k, v), '\\\n'])
                     else:
-                        print(value)
                         for env in value:
                             if env.startswith('constraint') or env.startswith('affinity'):
                                 constraint = env.split(':', 2)[1]
@@ -308,7 +307,9 @@ class DockerCompose:
                             else:
                                 envparts = env.split('=')
                                 if len(envparts)==1:
-                                    print(os.environ[env])
+                                     # fail when var is not set
+                                     f = os.environ[env]
+
                             #        cmd.extend(['--env-add', '"{}={}"'.format(env,os.environ[env]), '\\\n'])
                             #        print(env)
                             #        print(os.environ[env])
