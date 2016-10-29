@@ -206,6 +206,129 @@ class DockerCompose:
 
         if services_to_start:
             self.start(services_to_start)
+    def update(self):
+        for network in self.networks:
+            if not self.is_external_network(network):
+                cmd = '[ "`docker network ls | awk \'{{print $2}}\' | egrep \'^{0}$\'`" != "" ] || docker network create --driver overlay --opt encrypted {0}' \
+                    .format(self.project_prefix(network))
+                self.call(cmd)
+
+        for volume in self.volumes:
+            cmd = '[ "`docker volume ls | awk \'{{print $2}}\' | egrep \'^{0}$\'`" != "" ] || docker volume create --name {0}' \
+                .format(self.project_prefix(volume))
+            self.call(cmd)
+
+        services_to_start = []
+
+        for service in self.filtered_services:
+            if not self.is_service_exists(service):
+                print('ERROR: service %s not exists. Need to up it first' % service)
+                sys.exit(1)
+                continue
+
+            service_config = self.services[service]
+            cmd = ['docker service update --with-registry-auth \\\n --name', self.project_prefix(service), '\\\n']
+
+            service_image = []
+            service_command = []
+
+            for parameter in service_config:
+                value = service_config[parameter]
+
+                def restart():
+                    cmd.extend(['--restart-condition', {'always': 'any', 'none':'none', 'on-failure':'on-failure'}[value], '\\\n'])
+
+                def logging():
+                    cmd.extend(['--log-driver', value['driver'], '\\\n'])
+                    log_opts = value['options']
+                    for k, v in log_opts.items():
+                        cmd.extend(['--log-opt', '{}={}'.format(k, v), '\\\n'])
+
+                def mem_limit():
+                    cmd.extend(['--limit-memory', value, '\\\n'])
+
+                def image():
+                    cmd.extend(['--image', value, '\\\n'])
+
+                def command():
+                    cmd.extend(['--args', '"'+value.replace('\\','\\\\').replace('"','\\"')+'"', '\\\n'])
+
+                def expose():
+                    pass  # unsupported
+
+                def container_name():
+                    pass  # unsupported
+
+                def hostname():
+                    pass  # unsupported; waiting for https://github.com/docker/docker/issues/24877
+
+                def extra_hosts():
+                    pass  # unsupported
+
+                def ports():
+                    for port in value:
+                        cmd.extend(['--publish-add', port, '\\\n'])
+
+                def labels():
+                    for label in value:
+                        cmd.extend(['--label-add', label, '\\\n'])
+
+                def networks():
+                    pass
+                #    for network in value:
+                #        cmd.extend(['--network', network if self.is_external_network(network) else self.project_prefix(network), '\\\n'])
+
+                def volumes():
+                    pass
+                #    pass due to a bug https://github.com/docker/docker/issues/25772
+                #    for volume in value:
+                #        splitted_volume = volume.split(':')
+                #        src = splitted_volume.pop(0)
+                #        dst = splitted_volume.pop(0)
+                #        readonly = 0
+                #        if splitted_volume and splitted_volume[0] == 'ro':
+                #            readonly = 1
+                #        if src.startswith('.'):
+                #            src = src.replace('.', self.compose_base_dir, 1)
+                #
+                #                        if src.startswith('/'):
+                #                            cmd.extend(['--mount-add', 'type=bind,src={},dst={},readonly={}'.format(src, dst,readonly), '\\\n'])
+                #                        else:
+                #                            cmd.extend(['--mount-add', 'src={},dst={},readonly={}'.format(self.project_prefix(src), dst,readonly), '\\\n'])
+                def environment():
+                    if isinstance(value, dict):
+                        for k, v in value.items():
+                            cmd.extend(['--env-add', '"{}={}"'.format(k, v), '\\\n'])
+                    else:
+                        print(value)
+                        for env in value:
+                            if env.startswith('constraint') or env.startswith('affinity'):
+                                constraint = env.split(':', 2)[1]
+                                cmd.extend(['--constraint-add', '"{}"'.format(constraint), '\\\n'])
+                            else:
+                                envparts = env.split('=')
+                                if len(envparts)==1:
+                                    print(os.environ[env])
+                            #        cmd.extend(['--env-add', '"{}={}"'.format(env,os.environ[env]), '\\\n'])
+                            #        print(env)
+                            #        print(os.environ[env])
+                            #    else:
+
+                                cmd.extend(['--env-add', '"{}"'.format(env), '\\\n'])
+
+                def replicas():
+                    cmd.extend(['--replicas', value, '\\\n'])
+
+                def unsupported():
+                    print('WARNING: unsupported parameter {}'.format(parameter))
+
+                locals().get(parameter, unsupported)()
+
+            services = filter(self.is_service_exists, self.filtered_services)
+            cmd_args = [self.project_prefix(service) for service in services]
+
+
+            self.call(' '.join(cmd)+' '.join(cmd_args))
 
     def pull(self):
         nodes = self.call("docker node ls | grep Ready | awk -F'[[:space:]][[:space:]]+' '{print $2}'").rstrip().split('\n')
@@ -287,6 +410,10 @@ def main():
     up_parser = subparsers.add_parser('up', help='Create and start services', add_help=False, parents=[services_parser])
     up_parser.set_defaults(command='up')
     up_parser.add_argument('-d', help='docker-compose compatibility; ignored', action='store_true')
+
+    update_parser = subparsers.add_parser('update', help='Update services', add_help=False, parents=[services_parser])
+    update_parser.set_defaults(command='update')
+    update_parser.add_argument('-d', help='docker-compose compatibility; ignored', action='store_true')
 
     args = parser.parse_args(sys.argv[1:])
 
