@@ -81,7 +81,7 @@ class DockerCompose:
             sys.exit(1)
         return isinstance(self.networks[network], dict) and 'external' in self.networks[network]
 
-    def up(self):
+    def create(self):
         for network in self.networks:
             if not self.is_external_network(network):
                 cmd = '[ "`docker network ls | awk \'{{print $2}}\' | egrep \'^{0}$\'`" != "" ] || docker network create --driver overlay --opt encrypted {0}' \
@@ -206,7 +206,7 @@ class DockerCompose:
 
         if services_to_start:
             self.start(services_to_start)
-    def update(self):
+    def up(self):
         for network in self.networks:
             if not self.is_external_network(network):
                 cmd = '[ "`docker network ls | awk \'{{print $2}}\' | egrep \'^{0}$\'`" != "" ] || docker network create --driver overlay --opt encrypted {0}' \
@@ -222,8 +222,8 @@ class DockerCompose:
 
         for service in self.filtered_services:
             if not self.is_service_exists(service):
-                print('ERROR: service %s not exists. Need to up it first' % service)
-                sys.exit(1)
+                print('Service %s not exists. Creating...' % service)
+                self.create()
                 continue
 
             service_config = self.services[service]
@@ -407,13 +407,9 @@ def main():
     stop_parser = subparsers.add_parser('stop', help='Stop services', add_help=False, parents=[services_parser])
     stop_parser.set_defaults(command='stop')
 
-    up_parser = subparsers.add_parser('up', help='Create and start services', add_help=False, parents=[services_parser])
+    up_parser = subparsers.add_parser('up', help='Update the service, create if missing', add_help=False, parents=[services_parser])
     up_parser.set_defaults(command='up')
     up_parser.add_argument('-d', help='docker-compose compatibility; ignored', action='store_true')
-
-    update_parser = subparsers.add_parser('update', help='Update services', add_help=False, parents=[services_parser])
-    update_parser.set_defaults(command='update')
-    update_parser.add_argument('-d', help='docker-compose compatibility; ignored', action='store_true')
 
     args = parser.parse_args(sys.argv[1:])
 
